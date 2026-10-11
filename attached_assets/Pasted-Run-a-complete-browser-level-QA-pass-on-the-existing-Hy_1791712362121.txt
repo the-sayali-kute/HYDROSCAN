@@ -1,0 +1,25 @@
+Run a complete browser-level QA pass on the existing HydroScan AI application using clearly labelled synthetic GeoTIFF test rasters.
+
+Do not rebuild the app or add unnecessary features. Focus on completing the eight outstanding verification areas.
+
+**Test requirements:**
+
+1. **Dashboard:** Open the application and check for console errors, failed network requests, and broken navigation.
+2. **Satellite upload:** Use browser automation to select valid synthetic B02, B03, B04, and B08 GeoTIFF files. Test invalid files, missing bands, and incompatible raster grids.
+3. **NDWI and water mask:** Run the complete browser workflow, change the threshold, regenerate the mask, and verify that the displayed results update correctly.
+4. **Anomaly analysis:** Trigger the analysis from the UI and verify that the displayed explanations and values match the backend response.
+5. **Interactive map:** Upload a synthetic raster with a known CRS and geographic transform. Verify that the overlay appears in the correct location and that no-data states are handled correctly.
+6. **PDF and CSV exports:** Download both files through the UI, open them, and verify that they contain the correct analysis results.
+7. **Analysis history:** Save an analysis, navigate away, refresh the page, and verify that the record is still available. Test persistence across an application restart if feasible.
+8. **Mobile layout:** Use a mobile viewport to test navigation, upload controls, charts, error messages, and exports.
+
+**Implementation rules:**
+- Use Playwright or another browser automation tool already available in the workspace. Install additional tooling only if necessary.
+- Generate small synthetic rasters with known values and georeferencing. Label all results as synthetic test data.
+- Verify NDWI against manually calculated expected values and verify that threshold changes affect the mask correctly.
+- Do not claim that synthetic results validate real-world river pollution detection.
+- Fix confirmed bugs, rerun the affected tests, and preserve existing functionality.
+- Do not claim a browser test passed unless it was actually executed.
+- Test the deployed website if browser automation can access it; otherwise, clearly distinguish local-preview results from live-deployment results.
+
+At completion, update `artifacts/hydroscan-ai/docs/test-report.md` with a table for all eight checks, evidence, pass/fail status, bugs fixed, and remaining limitations. Give me the exact commands to run any tests that could not be executed automatically.
