@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: HydroScan AI satellite analysis API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: analyses
+    description: Satellite image analysis and history
+  - name: system
+    description: Application readiness
 paths:
   /healthz:
     get:
@@ -24,6 +28,219 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /overview:
+    get:
+      operationId: getOverview
+      tags: [analyses]
+      summary: Get dashboard metrics and recent analyses
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+  /analyses:
+    get:
+      operationId: listAnalyses
+      tags: [analyses]
+      summary: List saved analyses
+      responses:
+        "200":
+          description: Saved analyses in reverse chronological order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AnalysisSummary"
+    post:
+      operationId: createAnalysis
+      tags: [analyses]
+      summary: Run a demonstration analysis or analyze uploaded Sentinel-2 bands
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AnalysisInput"
+      responses:
+        "201":
+          description: Analysis and generated assets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Analysis"
+        "400":
+          description: Invalid or incomplete input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /analyses/{analysisId}:
+    get:
+      operationId: getAnalysis
+      tags: [analyses]
+      summary: Get a saved analysis and its derived results
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Analysis details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Analysis"
+        "404":
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /analyses/{analysisId}/threshold:
+    patch:
+      operationId: updateAnalysisThreshold
+      tags: [analyses]
+      summary: Recalculate the candidate mask with a new NDWI threshold
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThresholdUpdate"
+      responses:
+        "200":
+          description: Updated mask and analysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Analysis"
+        "400":
+          description: Threshold outside the supported range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /analyses/{analysisId}/assets/{assetName}:
+    get:
+      operationId: getAnalysisAsset
+      tags: [analyses]
+      summary: Download a generated analysis image
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: assetName
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [rgb.png, ndwi.png, mask.png, mask-raw.png, comparison.png]
+      responses:
+        "200":
+          description: PNG visualization
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Analysis or asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /analyses/{analysisId}/export.csv:
+    get:
+      operationId: exportAnalysisCsv
+      tags: [analyses]
+      summary: Export calculated analysis values as CSV
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: CSV table of calculated values
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /analyses/{analysisId}/report.pdf:
+    get:
+      operationId: downloadAnalysisReport
+      tags: [analyses]
+      summary: Download the generated PDF report for an analysis
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: PDF analysis report
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Analysis or report not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /trends:
+    get:
+      operationId: getTrends
+      tags: [analyses]
+      summary: Compare compatible dated real satellite observations
+      responses:
+        "200":
+          description: Consistent, dated observations or an explanation that comparison is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendSummary"
+  /system-health:
+    get:
+      operationId: getSystemHealth
+      tags: [system]
+      summary: Check processing dependencies and local storage
+      responses:
+        "200":
+          description: Processing and storage status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +250,173 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    AnalysisInput:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [demo, upload]
+          description: demo creates clearly labeled synthetic sample data; upload requires all four band files.
+        observationDate:
+          type: string
+          format: date
+        areaLabel:
+          type: string
+          maxLength: 120
+        ndwiThreshold:
+          type: number
+          minimum: -1
+          maximum: 1
+        blue:
+          type: string
+          format: binary
+        green:
+          type: string
+          format: binary
+        red:
+          type: string
+          format: binary
+        nir:
+          type: string
+          format: binary
+    ThresholdUpdate:
+      type: object
+      properties:
+        threshold:
+          type: number
+          minimum: -1
+          maximum: 1
+      required: [threshold]
+    BandMetadata:
+      type: object
+      properties:
+        name: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        dtype: { type: string }
+        crs: { type: ["string", "null"] }
+        resolutionX: { type: ["number", "null"] }
+        resolutionY: { type: ["number", "null"] }
+      required: [name, width, height, dtype, crs, resolutionX, resolutionY]
+    AnomalyRegion:
+      type: object
+      properties:
+        id: { type: string }
+        priority: { type: string, enum: [low, moderate, high] }
+        score: { type: number }
+        pixels: { type: integer }
+        row: { type: integer }
+        column: { type: integer }
+        explanation: { type: string }
+        locationType: { type: string, enum: [geographic, pixel] }
+        coordinates: { type: ["array", "null"], items: { type: number } }
+      required: [id, priority, score, pixels, row, column, explanation, locationType, coordinates]
+    AnalysisSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        mode: { type: string, enum: [demonstration, satellite] }
+        areaLabel: { type: string }
+        observationDate: { type: ["string", "null"], format: date }
+        createdAt: { type: string, format: date-time }
+        threshold: { type: number }
+        validPixelPercent: { type: number }
+        waterCoveragePercent: { type: number }
+        candidateWaterPixels: { type: integer }
+        validPixels: { type: integer }
+        totalPixels: { type: integer }
+        anomalyCount: { type: integer }
+        dataQualityNote: { type: string }
+        reportId: { type: string }
+      required:
+        [id, mode, areaLabel, observationDate, createdAt, threshold, validPixelPercent, waterCoveragePercent, candidateWaterPixels, validPixels, totalPixels, anomalyCount, dataQualityNote, reportId]
+    Analysis:
+      allOf:
+        - $ref: "#/components/schemas/AnalysisSummary"
+        - type: object
+          properties:
+            sourceLabel: { type: string }
+            width: { type: integer }
+            height: { type: integer }
+            crs: { type: ["string", "null"] }
+            georeferenced: { type: boolean }
+            geographicBounds:
+              type: ["array", "null"]
+              items: { type: number }
+              minItems: 4
+              maxItems: 4
+            bands:
+              type: array
+              items: { $ref: "#/components/schemas/BandMetadata" }
+            anomalies:
+              type: array
+              items: { $ref: "#/components/schemas/AnomalyRegion" }
+            limitations:
+              type: array
+              items: { type: string }
+            assets:
+              type: object
+              properties:
+                rgb: { type: string }
+                ndwi: { type: string }
+                mask: { type: string }
+                rawMask: { type: string }
+                comparison: { type: string }
+              required: [rgb, ndwi, mask, rawMask, comparison]
+          required: [sourceLabel, width, height, crs, georeferenced, geographicBounds, bands, anomalies, limitations, assets]
+    Overview:
+      type: object
+      properties:
+        analysisCount: { type: integer }
+        latestAnalysis:
+          anyOf:
+            - $ref: "#/components/schemas/AnalysisSummary"
+            - type: "null"
+        latestRealObservation:
+          anyOf:
+            - $ref: "#/components/schemas/AnalysisSummary"
+            - type: "null"
+        compatibleDatedObservations: { type: integer }
+        totalFlaggedRegions: { type: integer }
+        dataModeLabel: { type: string }
+      required: [analysisCount, latestAnalysis, latestRealObservation, compatibleDatedObservations, totalFlaggedRegions, dataModeLabel]
+    TrendPoint:
+      type: object
+      properties:
+        observationDate: { type: string, format: date }
+        waterCoveragePercent: { type: number }
+        analysisId: { type: string, format: uuid }
+      required: [observationDate, waterCoveragePercent, analysisId]
+    TrendSummary:
+      type: object
+      properties:
+        available: { type: boolean }
+        message: { type: string }
+        observations:
+          type: array
+          items: { $ref: "#/components/schemas/TrendPoint" }
+      required: [available, message, observations]
+    DependencyStatus:
+      type: object
+      properties:
+        name: { type: string }
+        available: { type: boolean }
+        version: { type: ["string", "null"] }
+      required: [name, available, version]
+    SystemHealth:
+      type: object
+      properties:
+        status: { type: string, enum: [ready, degraded] }
+        storageAvailable: { type: boolean }
+        dependencies:
+          type: array
+          items: { $ref: "#/components/schemas/DependencyStatus" }
+        message: { type: string }
+      required: [status, storageAvailable, dependencies, message]
 

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "HydroScan AI"
+description = "A local-first environmental intelligence app for inspecting Sentinel-2 imagery around the Godavari near Nashik, calculating transparent NDWI water candidates and spectral anomaly priorities, comparing dated observations, and exporting defensible reports."
+version = "1.0.0"
+id = "artifacts/hydroscan-ai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20810
+
+[services.development]
+run = "pnpm --filter @workspace/hydroscan-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hydroscan-ai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/hydroscan-ai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20810"
+BASE_PATH = "/"

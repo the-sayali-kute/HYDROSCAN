@@ -1,0 +1,184 @@
+# MASTER PROMPT — BUILD COMPLETE HYDROSCAN AI
+
+Act as a senior full-stack developer, geospatial data scientist, machine-learning engineer, UI/UX designer, and technical mentor. Build a complete, functional, professional end-semester engineering project named:
+
+**HydroScan AI: AI-Powered River Pollution Detection, Prediction and Environmental Intelligence System**
+
+## 1. Project objective
+
+Develop an environmental-intelligence web application that analyzes Sentinel-2 satellite imagery of a selected stretch of the Godavari River near Nashik, Maharashtra, India, to identify potential water regions, detect spectral anomalies, calculate preliminary environmental risk indicators, visualize results, and generate reports for further investigation.
+
+This is a college engineering project. Prioritize real functionality, scientific credibility, a professional interface, and code that a student can understand and explain.
+
+## 2. Mandatory technology stack
+
+- Frontend: HTML5, CSS3, JavaScript, Bootstrap or a polished custom responsive design.
+- Backend: Python and Flask.
+- Image and geospatial processing: NumPy, Rasterio, Pillow, Matplotlib, and GeoPandas only where needed.
+- Data analysis and machine learning: Pandas and scikit-learn where appropriate.
+- Interactive maps: Leaflet with OpenStreetMap-compatible basemaps.
+- Charts: Chart.js or Matplotlib.
+- Reports: PDF generation using a suitable Python library.
+- Data persistence: SQLite if persistent storage is required; avoid unnecessary database complexity.
+- Development: VS Code, with a clearly documented Python virtual environment.
+
+Do not use Streamlit. Do not require paid APIs, paid datasets, paid hosting, or a paid AI API. The core application must work locally without an external AI API key.
+
+## 3. First inspect the environment
+
+If access to an existing project folder is available:
+1. Inspect all files and understand the current architecture before editing.
+2. Reuse existing preprocessing scripts and valid output files.
+3. Preserve working scripts and never delete original satellite data.
+4. Detect actual available filenames, raster dimensions, coordinate reference systems, band resolutions, data shapes, and output paths.
+5. Do not assume that the AI agent can access files on my local computer unless they have been uploaded or made accessible.
+6. If data is unavailable, build a clear data-import workflow and a clearly labelled demonstration mode using synthetic data. Never present synthetic results as real observations.
+
+If starting in a new cloud workspace, build the application so that satellite data can be uploaded later or imported through a documented local-data setup process. Never upload a huge satellite archive unnecessarily.
+
+## 4. Required application pages
+
+### A. Overview dashboard
+- Professional dark navy, teal, white, and subtle green environmental-intelligence theme.
+- Sidebar navigation, responsive layout, metric cards, charts, and recent analyses.
+- Study-area description, data source, observation date, processing status, and last analysis time.
+- Display only metrics calculated from actual available data.
+- Distinguish measured, satellite-derived, estimated, and demonstration values.
+
+### B. Satellite imagery explorer
+- Upload or select compatible local Sentinel-2 band files.
+- Display an RGB composite using the available red, green, and blue bands.
+- Display NDWI when suitable green and near-infrared bands are available.
+- Provide layer toggles, legends, image metadata, and download options.
+- Handle different raster dimensions, missing files, nodata values, CRS information, and invalid inputs safely.
+- Never silently resample data or misalign bands without documenting the operation.
+
+### C. Water-region analysis
+- Calculate NDWI using the formula (Green - NIR) / (Green + NIR), with safe handling of zero denominators and invalid pixels.
+- Allow a configurable threshold and show how the threshold changes the candidate water mask.
+- Provide raw and cleaned candidate masks with side-by-side comparisons.
+- Include basic connected-component filtering or morphological cleaning where appropriate.
+- Show pixel counts and valid-pixel coverage, but do not describe the mask as a verified river boundary unless independently validated.
+- Clearly explain the limitations of NDWI, including confusion with shadows, land cover, turbidity, and other surface conditions.
+
+### D. Spectral anomaly and preliminary risk analysis
+- Identify unusual spectral patterns using defensible, transparent statistical methods.
+- Where data supports it, calculate normalized band-based indicators and robust outlier scores.
+- Explain which bands or indicators contributed to each flagged region.
+- Provide configurable preliminary categories such as Low, Moderate, and High anomaly priority.
+- Show the thresholds and reasoning behind each category.
+- Include confidence or data-quality indicators where they can be justified.
+- Do not call these categories confirmed water-quality measurements or verified pollution levels.
+- Do not train a model on invented labels or report fabricated accuracy, precision, recall, or F1 scores.
+
+### E. Interactive geographical map
+- Display the study area and available georeferenced results on a Leaflet map.
+- Overlay georeferenced raster results only when valid geographic transforms and coordinate reference systems are available.
+- Show flagged locations with explanatory popups and priority labels.
+- Do not invent latitude/longitude coordinates or exact pollution-source locations.
+- If georeferencing is unavailable, show the image in pixel coordinates and explain the limitation.
+
+### F. Historical comparison and trend analysis
+- Allow comparisons between available dated satellite observations.
+- Display trends only when at least two genuinely distinct, dated observations are available and are processed consistently.
+- Explain when seasonal changes, clouds, sensor differences, or processing differences affect comparisons.
+- If only one observation is available, show a clear message that historical trend analysis requires additional dates.
+
+### G. Reports and exports
+- Generate downloadable PDF analysis reports.
+- Include study area, source-image metadata, observation date, RGB image, NDWI visualization, candidate water mask, anomaly results, charts, limitations, and suggested follow-up investigations.
+- Export calculated tables to CSV.
+- Include a unique report ID and report-generation timestamp.
+- Never include fabricated measurements or unsupported conclusions.
+
+### H. Analysis history
+- Save analysis metadata and report records locally.
+- Allow the user to reopen previous analyses and download their reports.
+- Handle missing or deleted output files gracefully.
+
+### I. Methodology and help
+- Explain the full workflow from satellite bands to indicators, masks, anomaly flags, and reports.
+- Include formulas, assumptions, a system architecture diagram, limitations, and future improvements.
+- Add a beginner-friendly guide describing how to run the project and explain its modules during a college viva.
+
+## 5. Extra features for end-semester evaluation
+
+Implement the following after the core workflow works:
+1. Adjustable NDWI threshold with immediate mask regeneration.
+2. Side-by-side before/after mask comparison.
+3. An anomaly-priority queue for regions needing inspection.
+4. Explainable results showing why a region was flagged.
+5. Data-quality and cloud/nodata warnings.
+6. Downloadable, well-formatted environmental reports.
+7. A sample-data demonstration mode clearly separated from real satellite analysis.
+8. A system-health page showing available bands, files, dependencies, and processing status.
+9. A clean, interactive dashboard with loading indicators, empty states, error messages, tooltips, and responsive layouts.
+
+Do not add complex features merely for appearance if they are not functional. Add a prediction model only if suitable real historical data and a defensible validation procedure are available. Otherwise, present trend analysis and preliminary anomaly prioritization instead of claiming a validated prediction.
+
+## 6. Architecture and code quality
+
+Organize the project into clear modules for:
+- Flask routes and application configuration.
+- Satellite data loading and validation.
+- Image preprocessing and visualization.
+- Water-index calculations and masking.
+- Anomaly analysis.
+- Mapping and geospatial utilities.
+- Reports and exports.
+- Templates, static CSS/JavaScript, tests, and documentation.
+
+Avoid one giant Python file. Use reusable functions, meaningful variable names, comments for complex operations, configuration for paths and thresholds, and proper error handling.
+
+Do not expose secrets, hard-code machine-specific paths throughout the application, or require internet access for core calculations.
+
+## 7. Testing and completion requirements
+
+The project is not complete merely because the UI looks good.
+
+- Install dependencies and run the application.
+- Test the actual Flask routes.
+- Test formulas using small known input arrays.
+- Test missing files, invalid uploads, nodata pixels, and incompatible raster dimensions.
+- Verify that each dashboard button performs a real operation.
+- Verify that charts reflect calculated data.
+- Verify that PDF and CSV exports open and contain correct information.
+- Fix runtime errors and broken links.
+- Add a small automated test suite.
+- If the environment supports execution, actually run the tests and report the results. Never claim tests passed without running them.
+
+## 8. Required deliverables
+
+Produce:
+1. Complete source code.
+2. requirements.txt.
+3. README.md with exact Windows/PowerShell setup and run commands.
+4. A documented project folder structure.
+5. A system architecture diagram.
+6. A methodology and algorithm explanation.
+7. A test report describing executed tests.
+8. Sample screenshots or a demonstration walkthrough, clearly distinguishing demo data from real results.
+9. A list of limitations and future scope.
+10. A viva preparation document with likely questions and understandable answers.
+
+## 9. Development process
+
+Work in phases rather than generating a huge untested codebase.
+
+Phase 1: Inspect existing files and create an implementation plan.
+
+Phase 2: Build a runnable Flask application and responsive dashboard.
+
+Phase 3: Integrate the actual satellite-processing pipeline.
+
+Phase 4: Add anomaly analysis, mapping, charts, and reports.
+
+Phase 5: Add history, quality checks, and extra features.
+
+Phase 6: Run tests, fix errors, document everything, and verify the full demonstration workflow.
+
+After each phase, summarize which files changed, what works, what remains, and the exact command to test it. Do not stop at a plan or mockup; continue implementation until all feasible core features are functional.
+
+If something cannot be completed due to missing data, unavailable tools, or platform limits, explain the blocker and implement the best honest fallback.
+
+**Final goal:** Deliver a runnable, scientifically responsible, visually impressive HydroScan AI application that uses real available data, can be demonstrated during an end-semester evaluation, and is understandable enough for me to explain and defend myself.
