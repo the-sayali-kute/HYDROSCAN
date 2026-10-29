@@ -90,6 +90,7 @@ def _public_analysis(stored: dict[str, Any]) -> dict[str, Any]:
         "mask": "mask.png",
         "rawMask": "mask-raw.png",
         "comparison": "comparison.png",
+        "pollutionHeatmap": "pollution-heatmap.png",
     }
     result["assets"] = {
         key: (
@@ -147,13 +148,22 @@ def _create_analysis(
                 uploaded = request.files.get(band)
                 if uploaded is None or not uploaded.filename:
                     raise AnalysisInputError(f"Choose a GeoTIFF file for the {band.upper()} band.")
-                if Path(uploaded.filename).suffix.lower() not in {".tif", ".tiff"}:
-                    raise AnalysisInputError(f"The {band.upper()} band must be a .tif or .tiff file.")
-                saved = source_dir / f"{band}.tif"
+                suffix = Path(uploaded.filename).suffix.lower()
+
+                if suffix not in {".tif", ".tiff", ".jp2"}:
+                    raise AnalysisInputError(
+                        f"The {band.upper()} band must be a .tif, .tiff, or .jp2 file."
+                    )
+
+                saved = source_dir / f"{band}{suffix}"
                 uploaded.save(saved)
                 source_files[band] = str(saved)
+            print("[DEBUG] Starting load_band_files", flush=True)
             bands, valid, metadata = load_band_files(source_files)
+            print("[DEBUG] Finished load_band_files", flush=True)
 
+
+        print("[DEBUG] Starting analyze_bands", flush=True)
         result = analyze_bands(
             bands,
             valid,
@@ -164,6 +174,7 @@ def _create_analysis(
             observation_date=observation_date,
             output_dir=output_dir,
         )
+        print("[DEBUG] Finished analyze_bands", flush=True)
         result.update(
             {
                 "id": analysis_id,
@@ -177,11 +188,17 @@ def _create_analysis(
                     "mask": "mask.png",
                     "rawMask": "mask-raw.png",
                     "comparison": "comparison.png",
+                    "pollutionHeatmap": "pollution-heatmap.png",
                 },
             }
         )
+        print("[DEBUG] Starting PDF report", flush=True)
         build_pdf_report(result, analysis_dir)
+        print("[DEBUG] Finished PDF report", flush=True)
+
+        print("[DEBUG] Starting save_analysis", flush=True)
         save_analysis(result)
+        print("[DEBUG] Finished save_analysis", flush=True)
         return result
     except Exception:
         shutil.rmtree(analysis_dir, ignore_errors=True)
@@ -261,7 +278,7 @@ def _trend_summary(analyses: list[dict[str, Any]]) -> dict[str, Any]:
 
 def create_app() -> Flask:
     application = Flask(__name__)
-    application.config["MAX_CONTENT_LENGTH"] = 320 * 1024 * 1024
+    application.config["MAX_CONTENT_LENGTH"] =  500 * 1024 * 1024
     initialize()
 
     @application.get(f"{API_PREFIX}/healthz")

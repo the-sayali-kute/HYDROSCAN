@@ -20,7 +20,7 @@ from scipy import ndimage
 
 MAX_PIXELS = 12_000_000
 DEFAULT_THRESHOLD = 0.15
-ANOMALY_ROBUST_Z_THRESHOLD = 3.5
+ANOMALY_ROBUST_Z_THRESHOLD = 4.0
 BAND_ORDER = ("blue", "green", "red", "nir")
 PUBLIC_ASSETS = {
     "rgb.png": "rgb.png",
@@ -28,10 +28,12 @@ PUBLIC_ASSETS = {
     "mask.png": "mask.png",
     "mask-raw.png": "mask-raw.png",
     "comparison.png": "comparison.png",
+    "pollution-heatmap.png": "pollution-heatmap.png",
 }
 LIMITATIONS = [
     "NDWI is an index-based candidate mask, not a verified river boundary. Shadows, built surfaces, vegetation, turbidity, and other surface conditions can affect it.",
-    "Spectral anomaly priorities flag unusual band patterns for inspection; they are not confirmed water-quality measurements, pollution levels, or source locations.",
+    "Potential pollution screening is limited to spectral outliers inside the NDWI candidate-water mask. These are review candidates, not confirmed pollution, measured pollutant concentrations, or source locations.",
+    "No trained and independently validated pollution classifier or labelled water-quality samples are supplied. The system therefore cannot assign a scientifically validated pollution probability or clean/polluted class.",
     "No cloud mask is inferred from RGB/NIR bands. Nodata and invalid values are excluded, but clouds and haze may remain.",
     "Satellite provenance is not independently verified. Uploaded files are treated as user-provided raster bands.",
     "A single dated observation cannot establish a historical trend or predict future conditions.",
@@ -58,8 +60,10 @@ def load_band_files(paths: dict[str, str | Path]) -> tuple[dict[str, np.ndarray]
 
     for name in BAND_ORDER:
         path = Path(paths[name])
-        if path.suffix.lower() not in {".tif", ".tiff"}:
-            raise AnalysisInputError(f"The {name.upper()} band must be a GeoTIFF (.tif or .tiff).")
+        if path.suffix.lower() not in {".tif", ".tiff", ".jp2"}:
+            raise AnalysisInputError(
+                f"The {name.upper()} band must be a GeoTIFF or JPEG 2000 (.tif, .tiff, or .jp2)."
+            )
         try:
             dataset = rasterio.open(path)
         except (rasterio.errors.RasterioError, OSError) as error:
@@ -300,17 +304,57 @@ def _write_visualizations(
         fig.savefig(output_dir / filename, dpi=150, bbox_inches="tight")
         plt.close(fig)
 
+    # Compare raw and cleaned candidate-water masks.
     fig, axes = plt.subplots(1, 2, figsize=(11, 5), constrained_layout=True)
     for ax, data, title in (
         (axes[0], raw_mask, "Before component filtering"),
         (axes[1], clean_mask, "After component filtering"),
     ):
         display = np.ma.masked_where(~valid, data.astype(np.float32))
-        ax.imshow(display, cmap=matplotlib.colors.ListedColormap(["#eaf2ed", "#14b8a6"]), vmin=0, vmax=1)
+        ax.imshow(
+            display,
+            cmap=matplotlib.colors.ListedColormap(["#eaf2ed", "#14b8a6"]),
+            vmin=0,
+            vmax=1,
+        )
         ax.set_title(title)
         ax.set_axis_off()
     fig.suptitle("Candidate water mask comparison")
     fig.savefig(output_dir / "comparison.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    # Spectral anomaly review heatmap, restricted to candidate-water pixels.
+    # This is not a pollution measurement or a validated pollution probability.
+    heatmap_values = np.ma.masked_where(
+        ~(valid & clean_mask & (anomaly_score >= ANOMALY_ROBUST_Z_THRESHOLD)),
+        anomaly_score,
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 6), constrained_layout=True)
+    ax.imshow(rgb, interpolation="nearest")
+
+    if valid.any():
+        upper = float(np.percentile(anomaly_score[valid], 99))
+    else:
+        upper = ANOMALY_ROBUST_Z_THRESHOLD + 1.0
+    upper = max(upper, ANOMALY_ROBUST_Z_THRESHOLD + 1.0)
+
+    heatmap = ax.imshow(
+        heatmap_values,
+        cmap="inferno",
+        interpolation="nearest",
+        alpha=0.75,
+        vmin=ANOMALY_ROBUST_Z_THRESHOLD,
+        vmax=upper,
+    )
+    fig.colorbar(heatmap, ax=ax, label="Relative spectral anomaly score")
+    ax.set_title("Spectral anomaly review — not a pollution measurement")
+    ax.set_axis_off()
+    fig.savefig(
+        output_dir / "pollution-heatmap.png",
+        dpi=150,
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 
@@ -334,12 +378,33 @@ def analyze_bands(
 
     ndwi, computable = calculate_ndwi(bands["green"], bands["nir"], valid)
     ndwi_valid = computable & np.isfinite(ndwi)
-    raw_mask = ndwi_valid & (ndwi >= threshold)
-    minimum_component = max(3, int(valid.sum() * 0.00001))
-    clean_mask = _component_filter(raw_mask, minimum_component) & ndwi_valid
+    # river_corridor is a Boolean mask made from a verified river polygon.
+    river_corridor = load_river_corridor(metadata, ndwi.shape)
+    raw_mask = ndwi_valid & (ndwi >= threshold) & river_corridor
 
+    # Connect small gaps in candidate-water regions.
+    closed_mask = ndimage.binary_closing(
+        raw_mask,
+        structure=np.ones((3, 3), dtype=bool)
+    )
+
+    # Keep every processed pixel inside both the valid data and the reviewed
+    # river corridor. Morphological closing can otherwise expand beyond it.
+    closed_mask &= ndwi_valid & river_corridor
+
+    # Remove very small isolated candidate regions.
+    minimum_component = max(8, int(valid.sum() * 0.00005))
+    clean_mask = (
+        _component_filter(closed_mask, minimum_component)
+        & ndwi_valid
+        & river_corridor
+    )
+
+    # Screen spectral outliers only inside the cleaned candidate-water mask.
+    # This narrows review to pixels that may belong to water; it does not prove
+    # that these pixels are polluted or that the NDWI mask is a perfect river boundary.
     anomaly_score, dominant_band = _robust_band_scores(bands, valid)
-    anomaly_candidates = valid & (anomaly_score >= ANOMALY_ROBUST_Z_THRESHOLD)
+    anomaly_candidates = clean_mask & (anomaly_score >= ANOMALY_ROBUST_Z_THRESHOLD)
     anomaly_labels, region_count = ndimage.label(anomaly_candidates, structure=np.ones((3, 3), dtype=np.uint8))
     region_sizes = np.bincount(anomaly_labels.ravel()) if region_count else np.array([0])
     minimum_region = max(5, int(valid.sum() * 0.00001))
@@ -378,7 +443,7 @@ def analyze_bands(
         explanation = (
             f"Connected region of {len(rows):,} pixels exceeded the robust spectral outlier threshold "
             f"({ANOMALY_ROBUST_Z_THRESHOLD:g}); {BAND_ORDER[band_index].upper()} contributed the largest deviation at its peak pixel. "
-            f"Mean robust score: {region_score:.2f}. This is an inspection priority, not a pollution finding."
+            f"Mean robust score: {region_score:.2f}. Candidate-water-only spectral screening; this is not a confirmed pollution finding."
         )
         anomalies.append(
             {
@@ -440,8 +505,52 @@ def analyze_bands(
         "thresholdMethod": {
             "mask": "NDWI >= configured threshold; NDWI = (Green - NIR) / (Green + NIR).",
             "cleaning": f"8-connected components smaller than {minimum_component} pixels are removed.",
-            "anomalies": f"Per-band median/MAD robust z-scores; a pixel is a candidate at max absolute robust z >= {ANOMALY_ROBUST_Z_THRESHOLD:g}.",
-            "priority": "Low < 4.5, Moderate 4.5–5.99, High >= 6.0 mean robust score. These are triage categories only.",
+            "anomalies": f"Potential pollution screening: per-band median/MAD robust z-scores are calculated across valid pixels; only pixels inside the cleaned NDWI candidate-water mask with max absolute robust z >= {ANOMALY_ROBUST_Z_THRESHOLD:g} are grouped for review.",
+            "priority": "Low < 4.5, Moderate 4.5–5.99, High >= 6.0 mean robust score. These are spectral-review priorities, not pollution severity or probability.",
         },
         "assets": {},
     }
+
+    
+
+def load_river_corridor(reference_meta, shape):
+    from pathlib import Path
+    import rasterio
+    from rasterio.crs import CRS
+
+    path = Path(r"D:\HydroScan-AI\river_corridor_mask.tif")
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"River corridor mask not found: {path}"
+        )
+
+    with rasterio.open(path) as src:
+        if src.count != 1:
+            raise ValueError("River corridor mask must contain exactly one raster band.")
+
+        if (src.height, src.width) != shape:
+            raise ValueError(
+                "River corridor dimensions do not match the input bands."
+            )
+
+        expected_crs = reference_meta.get("crs")
+        if expected_crs is None or src.crs != CRS.from_user_input(expected_crs):
+            raise ValueError(
+                "River corridor CRS does not match the input bands."
+            )
+
+        expected_transform = reference_meta.get("transform")
+        if src.transform != expected_transform:
+            raise ValueError(
+                "River corridor transform does not match the input bands."
+            )
+
+        values = src.read(1)
+        corridor = values == 1
+        if not np.any(corridor):
+            raise ValueError(
+                "River corridor mask contains no pixels with value 1. "
+                "Check that the mask was saved with 1 inside the corridor."
+            )
+        return corridor

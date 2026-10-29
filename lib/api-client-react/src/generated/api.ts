@@ -639,9 +639,6 @@ export function useGetAnalysisAsset<TData = Awaited<ReturnType<typeof getAnalysi
 
 export const getExportAnalysisCsvUrl = (analysisId: string,) => {
 
-
-
-
   return `/api/analyses/${analysisId}/export.csv`
 }
 
@@ -653,9 +650,10 @@ export const exportAnalysisCsv = async (analysisId: string, options?: Parameters
   return customFetch<Blob>(getExportAnalysisCsvUrl(analysisId),
   {
     ...options,
-    method: 'GET'
-
-
+    method: 'GET',
+    // CSV is text/csv, which the shared fetcher otherwise auto-parses as a string.
+    // Explicitly request a Blob so the frontend download handler can save it.
+    responseType: 'blob'
   }
 );}
 

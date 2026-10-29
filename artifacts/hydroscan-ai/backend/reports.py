@@ -115,7 +115,7 @@ def build_pdf_report(analysis: dict, analysis_dir: Path) -> Path:
         ["Candidate water pixels", f"{analysis['candidateWaterPixels']:,}", "Cleaned NDWI candidate pixels"],
         ["Candidate coverage", f"{analysis['waterCoveragePercent']:.2f}%", "Candidate pixels / mutually valid pixels"],
         ["Valid pixel coverage", f"{analysis['validPixelPercent']:.2f}%", "Pixels usable across all four bands"],
-        ["Spectral anomaly regions", str(analysis["anomalyCount"]), "Robust statistical outlier components"],
+        ["Water spectral anomalies", str(analysis["anomalyCount"]), "Outlier components inside candidate-water mask"],
     ]
     metric_table = Table(metric_rows, colWidths=[1.6 * inch, 1.25 * inch, 3.85 * inch], repeatRows=1)
     metric_table.setStyle(
@@ -159,10 +159,10 @@ def build_pdf_report(analysis: dict, analysis_dir: Path) -> Path:
                 ]
             )
     story.append(PageBreak())
-    story.append(Paragraph("Anomaly inspection queue", styles["HydroSection"]))
+    story.append(Paragraph("Potential pollution screening queue", styles["HydroSection"]))
     story.append(
         Paragraph(
-            "Regions are sorted by mean robust spectral outlier score. Coordinates are shown only when "
+            "Water-only spectral anomalies are sorted by mean robust outlier score. These are review candidates, not confirmed pollution. Coordinates are shown only when "
             "the uploaded raster has a usable CRS and affine transform; otherwise row and column are provided.",
             styles["HydroNote"],
         )
@@ -214,7 +214,7 @@ def build_pdf_report(analysis: dict, analysis_dir: Path) -> Path:
     story.append(Spacer(1, 7))
     story.append(
         Paragraph(
-            "Suggested follow-up: inspect flagged regions against cloud-masked imagery, compare additional "
+            "Suggested follow-up: inspect candidate-water spectral anomalies against cloud-masked imagery, compare additional "
             "consistent observation dates, and validate candidate locations with independent field or "
             "authoritative water-quality measurements before drawing environmental conclusions.",
             styles["HydroNote"],

@@ -26,7 +26,14 @@ import NotFound from '@/pages/not-found';
 import './index.css';
 
 const queryClient = new QueryClient();
-const ASSETS = ['rgb.png', 'ndwi.png', 'mask.png', 'mask-raw.png', 'comparison.png'] as const;
+const ASSETS = [
+  'rgb.png',
+  'ndwi.png',
+  'mask.png',
+  'mask-raw.png',
+  'comparison.png',
+  'pollution-heatmap.png',
+] as const;
 type AssetName = typeof ASSETS[number];
 
 const navItems = [
@@ -110,7 +117,14 @@ function Dashboard() {
   const trends = useGetTrends({ query: { queryKey: getGetTrendsQueryKey() } });
   const analyses = useListAnalyses({ query: { queryKey: getListAnalysesQueryKey() } });
   const overviewData = overview.data;
-  const recent = (analyses.data ?? []).slice(0, 4);
+  const analysisData = analyses.data;
+const analysisList = Array.isArray(analysisData)
+  ? analysisData
+  : Array.isArray((analysisData as any)?.data)
+    ? (analysisData as any).data
+    : [];
+
+const recent = analysisList.slice(0, 4);
   return <div className="page-wrap">
     <PageTitle eyebrow="OBSERVATION DESK · GODAVARI / NASHIK" title="Read the river, carefully." subtitle="A student research workspace for inspecting satellite-derived water signals — with evidence and limits kept in view."
       action={<Link href="/explorer" className="button button-primary"><ScanLine size={16} /> Open image explorer <ArrowRight size={15} /></Link>} />
@@ -123,7 +137,7 @@ function Dashboard() {
           <div className="hero-foot"><span><Satellite size={15} /> Sentinel-2 band workflow</span><span className="hero-sep" /><span>Central Maharashtra</span></div>
         </div>
         <div className="hero-visual" aria-label="Stylized satellite image of river channels">
-          <div className="visual-coordinate">SCHEMATIC · NOT GEOREFERENCED</div>
+          
           <div className="terrain-grid" />
           <svg className="river-art" viewBox="0 0 550 330" role="img" aria-label="Abstract braided river channel">
             <path className="river-shadow" d="M-20 215 C70 183 75 92 160 111 C227 126 225 217 312 189 C393 164 367 68 450 71 C497 73 519 116 580 92" />
@@ -157,12 +171,35 @@ function Dashboard() {
           <EmptyState title="No observation yet" copy="Start with a demonstration scene or bring your own Sentinel-2 bands." action={<Link href="/explorer" className="text-button">Start an analysis <ArrowRight size={14} /></Link>} />}
       </section>
     </div>
-    <section className="panel recent-panel">
-      <div className="panel-heading"><div><div className="eyebrow">NOTEBOOK</div><h2>Recent analyses</h2></div><Link href="/history" className="text-button">View all <ArrowRight size={14} /></Link></div>
-      {analyses.isLoading ? <LoadingPanel /> : analyses.isError ? <QueryError retry={() => analyses.refetch()} /> : recent.length ?
-        <div className="analysis-list">{recent.map((item) => <AnalysisRow key={item.id} item={item} />)}</div> :
-        <EmptyState title="The notebook is clear" copy="Your saved analyses will appear here once a scene has been processed." action={<Link href="/explorer" className="button button-secondary">Explore imagery</Link>} />}
-    </section>
+   <section className="panel recent-panel">
+  <div className="panel-heading">
+    <div>
+      <div className="eyebrow">NOTEBOOK</div>
+      <h2>Recent analyses</h2>
+    </div>
+    <Link href="/history" className="text-button">
+      View all <ArrowRight size={14} />
+    </Link>
+  </div>
+
+  {analyses.isLoading ? (
+    <LoadingPanel />
+  ) : analyses.isError ? (
+    <QueryError retry={() => analyses.refetch()} />
+  ) : recent.length > 0 ? (
+    <div className="analysis-list">
+      {recent.map((item: AnalysisSummary) => (
+        <AnalysisRow key={item.id} item={item} />
+      ))}
+    </div>
+  ) : (
+    <EmptyState
+      title="The notebook is clear"
+      copy="Your saved analyses will appear here once a scene has been processed."
+      action={<Link href="/explorer">Start an analysis</Link>}
+    />
+  )}
+</section>
     <EvidenceNote />
   </div>;
 }
@@ -306,8 +343,23 @@ function AnalysisView({ analysis }: { analysis: Analysis }) {
   const [savedNotice, setSavedNotice] = useState('');
   const update = useUpdateAnalysisThreshold();
   const qc = useQueryClient();
-  const image = useGetAnalysisAsset(analysis.id, asset, { query: { queryKey: getGetAnalysisAssetQueryKey(analysis.id, asset) } });
-  const objectUrl = useMemo(() => image.data ? URL.createObjectURL(image.data) : '', [image.data]);
+  
+const apiAsset = asset as Parameters<typeof useGetAnalysisAsset>[1];
+
+const image = useGetAnalysisAsset(analysis.id, apiAsset, {
+  query: {
+    queryKey: getGetAnalysisAssetQueryKey(
+      analysis.id,
+      apiAsset as Parameters<typeof getGetAnalysisAssetQueryKey>[1],
+    ),
+  },
+});
+
+const objectUrl = useMemo(
+  () => image.data ? URL.createObjectURL(image.data) : '',
+  [image.data],
+);
+
   const saveThreshold = () => update.mutate({ analysisId: analysis.id, data: { threshold } }, {
     onSuccess: (next) => {
       qc.setQueryData(getGetAnalysisQueryKey(analysis.id), next);
@@ -350,13 +402,13 @@ function AnalysisView({ analysis }: { analysis: Analysis }) {
       </section>
     </div>
     <section className="panel flagged-panel">
-      <div className="panel-heading"><div><div className="eyebrow">REGION REVIEW</div><h2>Flagged regions <span className="count-badge">{analysis.anomalies.length}</span></h2></div><span className="plain-label">Priority is a screening score</span></div>
+      <div className="panel-heading"><div><div className="eyebrow">POTENTIAL POLLUTION SCREENING · WATER PIXELS</div><h2>Water spectral anomalies <span className="count-badge">{analysis.anomalies.length}</span></h2></div><span className="plain-label">Spectral review priority</span></div>
       {analysis.anomalies.length ? <div className="anomaly-list">{analysis.anomalies.map((region) => <div className="anomaly-row" key={region.id}>
         <div className={`priority-mark priority-${region.priority}`}><CircleAlert size={16} /></div>
         <div className="anomaly-copy"><div><b>{region.priority} review priority</b><span className="score-tag">score {Number(region.score).toFixed(2)}</span></div><p>{region.explanation}</p><small>{region.locationType === 'geographic' && region.coordinates ? `Coordinates ${region.coordinates.map((n) => n.toFixed(5)).join(', ')}` : `Pixel location · row ${region.row}, column ${region.column}`}</small></div>
         <span className="pixel-count">{fmt(region.pixels)}<small>pixels</small></span>
-      </div>)}</div> : <EmptyState title="No regions were flagged" copy="No regions crossed the screening criteria for this analysis." />}
-      <div className="plain-caution"><CircleHelp size={14} /> Priority labels are not pollution measurements and do not identify a cause.</div>
+      </div>)}</div> : <EmptyState title="No regions were flagged" copy="No candidate-water pixels crossed the current spectral screening threshold. This does not prove the river is pollution-free." />}
+      <div className="plain-caution"><CircleHelp size={14} /> These are unusual spectral patterns inside candidate-water pixels, not confirmed pollution measurements. Field or laboratory validation is required.</div>
     </section>
     <section className="limitations-grid">
       <div className="panel limitation-card"><div className="eyebrow">LIMITATIONS TO CARRY FORWARD</div><h2>Claims stay inside the evidence.</h2>
@@ -367,9 +419,18 @@ function AnalysisView({ analysis }: { analysis: Analysis }) {
   </div>;
 }
 
+
 function assetLabel(item: AssetName) {
-  return ({ 'rgb.png': 'RGB composite', 'ndwi.png': 'NDWI index', 'mask.png': 'Candidate mask', 'mask-raw.png': 'Raw mask', 'comparison.png': 'Comparison' })[item];
+  return ({
+    'rgb.png': 'RGB composite',
+    'ndwi.png': 'NDWI index',
+    'mask.png': 'Candidate mask',
+    'mask-raw.png': 'Raw mask',
+    'comparison.png': 'Comparison',
+    'pollution-heatmap.png': 'Pollution heatmap',
+  })[item];
 }
+
 
 function DownloadActions({ analysisId }: { analysisId: string }) {
   const [feedback, setFeedback] = useState('');
@@ -533,14 +594,28 @@ function History() {
   const list = useListAnalyses({ query: { queryKey: getListAnalysesQueryKey() } });
   const [search, setSearch] = useState('');
   const [mode, setMode] = useState('all');
-  const rows = useMemo(() => (list.data ?? []).filter((item) => item.areaLabel.toLowerCase().includes(search.toLowerCase()) && (mode === 'all' || item.mode === mode)), [list.data, search, mode]);
+  const analysisList = Array.isArray(list.data)
+  ? list.data
+  : Array.isArray((list.data as any)?.data)
+    ? (list.data as any).data
+    : [];
+
+const rows = useMemo(
+  () =>
+   analysisList.filter(
+  (item: AnalysisSummary) =>
+        item.areaLabel.toLowerCase().includes(search.toLowerCase()) &&
+        (mode === 'all' || item.mode === mode)
+    ),
+  [analysisList, search, mode]
+);
   return <div className="page-wrap">
     <PageTitle eyebrow="RESEARCH NOTEBOOK" title="Your analysis archive." subtitle="Saved observations, calculations and exports. Demonstration scenes remain distinct from satellite observations." action={<Link href="/explorer" className="button button-primary"><ScanLine size={15} /> New analysis</Link>} />
     <section className="panel history-panel">
       <div className="history-tools"><label className="search-field"><Search size={16} /><input aria-label="Search analyses" placeholder="Search study area…" value={search} onChange={(event) => setSearch(event.target.value)} data-testid="input-history-search" /></label><div className="filter-tabs">{[['all', 'All'], ['satellite', 'Satellite'], ['demonstration', 'Demo']].map(([value, label]) => <button key={value} className={mode === value ? 'filter-tab active' : 'filter-tab'} onClick={() => setMode(value)}>{label}</button>)}</div></div>
       {list.isLoading ? <LoadingPanel /> : list.isError ? <QueryError retry={() => list.refetch()} /> : rows.length ? <>
         <div className="history-table-head"><span>STUDY AREA</span><span>MODE</span><span>OBSERVATION DATE</span><span>COVERAGE</span><span>FLAGGED</span><span>EXPORTS</span></div>
-        <div className="history-table">{rows.map((item) => <HistoryRow key={item.id} item={item} />)}</div>
+        <div className="history-table">{rows.map((item: AnalysisSummary) => <HistoryRow key={item.id} item={item} />)}</div>
         <div className="history-foot">{rows.length} {rows.length === 1 ? 'record' : 'records'} shown <span>Coverage represents candidate pixels, not a verified boundary.</span></div>
       </> : <EmptyState title="No matching analysis" copy={search ? 'Try a shorter place name, or clear the current filters.' : 'Your analysis archive will build as you inspect scenes.'} action={search || mode !== 'all' ? <button className="text-button" onClick={() => { setSearch(''); setMode('all'); }}>Clear filters <X size={14} /></button> : <Link href="/explorer" className="button button-secondary">Start an analysis</Link>} />}
     </section>
